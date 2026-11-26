@@ -20,46 +20,158 @@ const MIME = {
   '.png': 'image/png'
 };
 
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'X-Frame-Options': 'DENY'
+};
+
+const RATE_LIMIT = 30;
+const RATE_WINDOW_MS = 60 * 1000;
+const rateBuckets = new Map();
+
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const CACHE_MAX = 50;
+const resultCache = new Map();
+
+function headers(extra = {}) {
+  return { ...SECURITY_HEADERS, ...extra };
+}
+
 function sendJson(res, code, body) {
   const buf = Buffer.from(JSON.stringify(body));
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': buf.length });
+  res.writeHead(code, headers({ 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': buf.length }));
+  res.end(buf);
+}
+
+function sendText(res, code, text) {
+  const buf = Buffer.from(text);
+  res.writeHead(code, headers({ 'Content-Type': 'text/plain; charset=utf-8', 'Content-Length': buf.length }));
   res.end(buf);
 }
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let raw = '';
+    let settled = false;
+    let timer;
+
+    const fail = (msg) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error(msg));
+    };
+
+    timer = setTimeout(() => fail('请求体读取超时'), 15000);
+
     req.on('data', (chunk) => {
+      if (settled) return;
       raw += chunk;
-      if (raw.length > 1e6) reject(new Error('请求体过大'));
+      if (raw.length > 1e6) {
+        fail('请求体过大');
+        req.destroy();
+      }
     });
     req.on('end', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       try {
         resolve(raw ? JSON.parse(raw) : {});
       } catch {
         reject(new Error('请求体不是合法 JSON'));
       }
     });
-    req.on('error', reject);
+    req.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    });
   });
 }
 
-function serveStatic(res, urlPath) {
-  const rel = urlPath === '/' ? 'index.html' : decodeURIComponent(urlPath).replace(/^\/+/, '');
-  const file = path.join(PUBLIC_DIR, rel);
-  if (!file.startsWith(PUBLIC_DIR)) {
-    res.writeHead(403).end('forbidden');
-    return;
+function parseQuestion(body = {}) {
+  const question = String(body?.question || '').trim();
+  if (body?.questionUrl && !question) {
+    return { error: '暂不支持直接解析知乎链接，请粘贴问题标题。' };
   }
+  if (!question) return { error: '缺少 question' };
+  if (/^https?:\/\//i.test(question)) {
+    return { error: '暂不支持直接解析知乎链接，请粘贴问题标题。' };
+  }
+  return { question };
+}
+
+function cacheKey(question) {
+  return String(question).replace(/\s+/g, ' ').trim();
+}
+
+function cacheGet(key) {
+  const hit = resultCache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > CACHE_TTL_MS) {
+    resultCache.delete(key);
+    return null;
+  }
+  return hit.value;
+}
+
+function cacheSet(key, value) {
+  if (resultCache.size >= CACHE_MAX) {
+    resultCache.delete(resultCache.keys().next().value);
+  }
+  resultCache.set(key, { at: Date.now(), value });
+}
+
+function clientIp(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwarded || req.socket.remoteAddress || 'unknown';
+}
+
+function isRateLimited(req) {
+  const now = Date.now();
+  const ip = clientIp(req);
+  let bucket = rateBuckets.get(ip);
+  if (!bucket || now >= bucket.reset) {
+    bucket = { count: 0, reset: now + RATE_WINDOW_MS };
+    rateBuckets.set(ip, bucket);
+  }
+  bucket.count += 1;
+
+  if (rateBuckets.size > 1000) {
+    for (const [key, value] of rateBuckets) if (now >= value.reset) rateBuckets.delete(key);
+  }
+  return bucket.count > RATE_LIMIT;
+}
+
+function serveStatic(res, urlPath) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(urlPath);
+  } catch {
+    return sendText(res, 400, 'bad request');
+  }
+
+  const rel = decoded === '/' ? 'index.html' : decoded.replace(/^\/+/, '');
+  if (!rel || rel.includes('\0')) return sendText(res, 400, 'bad request');
+
+  const file = path.join(PUBLIC_DIR, rel);
+  if (file !== PUBLIC_DIR && !file.startsWith(PUBLIC_DIR + path.sep)) {
+    return sendText(res, 403, 'forbidden');
+  }
+
   fs.readFile(file, (err, buf) => {
-    if (err) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('not found');
-      return;
-    }
-    res.writeHead(200, {
-      'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
-      'Cache-Control': 'no-cache'
-    });
+    if (err) return sendText(res, 404, 'not found');
+    res.writeHead(
+      200,
+      headers({
+        'Content-Type': MIME[path.extname(file)] || 'application/octet-stream',
+        'Content-Length': buf.length,
+        'Cache-Control': 'no-cache'
+      })
+    );
     res.end(buf);
   });
 }
@@ -89,23 +201,30 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/api/analyze/stream' && req.method === 'POST') {
+    if (isRateLimited(req)) {
+      return sendJson(res, 429, { ok: false, error: '请求过于频繁，请稍后再试。' });
+    }
+
     let body;
     try {
       body = await readBody(req);
     } catch (err) {
       return sendJson(res, 400, { ok: false, error: err.message });
     }
-    if (!body.question && !body.questionUrl) {
-      return sendJson(res, 400, { ok: false, error: '缺少 question 或 questionUrl' });
-    }
+    const parsed = parseQuestion(body);
+    if (parsed.error) return sendJson(res, 400, { ok: false, error: parsed.error });
+    const key = cacheKey(parsed.question);
 
     // NDJSON 流：先把每个阶段的开始/结束实时推给前端，最后再推完整结果
-    res.writeHead(200, {
-      'Content-Type': 'application/x-ndjson; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no'
-    });
+    res.writeHead(
+      200,
+      headers({
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no'
+      })
+    );
     if (typeof res.flushHeaders === 'function') res.flushHeaders();
 
     let closed = false;
@@ -116,10 +235,28 @@ const server = http.createServer(async (req, res) => {
       res.write(JSON.stringify(obj) + '\n');
     };
 
+    const cached = cacheGet(key);
+    if (cached) {
+      for (const stage of cached.stages || []) {
+        write({
+          type: 'stage',
+          stage: stage.id,
+          label: stage.label,
+          status: 'done',
+          ms: (cached.timings && cached.timings[stage.id]) || 0
+        });
+      }
+      write({ type: 'result', payload: cached });
+      if (!res.writableEnded) res.end();
+      return;
+    }
+
     try {
-      const result = await analyze(body, {
+      const result = await analyze({ question: parsed.question }, {
         onStage: (evt) => write({ type: 'stage', ...evt })
       });
+      // 只缓存真实链路；示例数据是演示用，不应该掩盖真实的阶段耗时
+      if (result.ok && result.provider !== 'sample') cacheSet(key, result);
       write({ type: 'result', payload: result });
     } catch (err) {
       write({ type: 'result', payload: { ok: false, error: err.message } });
@@ -130,12 +267,26 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/api/analyze' && req.method === 'POST') {
+    if (isRateLimited(req)) {
+      return sendJson(res, 429, { ok: false, error: '请求过于频繁，请稍后再试。' });
+    }
+
+    let body;
     try {
-      const body = await readBody(req);
-      if (!body.question && !body.questionUrl) {
-        return sendJson(res, 400, { ok: false, error: '缺少 question 或 questionUrl' });
-      }
-      const result = await analyze(body);
+      body = await readBody(req);
+    } catch (err) {
+      return sendJson(res, 400, { ok: false, error: err.message });
+    }
+    const parsed = parseQuestion(body);
+    if (parsed.error) return sendJson(res, 400, { ok: false, error: parsed.error });
+    const key = cacheKey(parsed.question);
+
+    try {
+      const cached = cacheGet(key);
+      if (cached) return sendJson(res, 200, cached);
+
+      const result = await analyze({ question: parsed.question });
+      if (result.ok && result.provider !== 'sample') cacheSet(key, result);
       return sendJson(res, result.ok ? 200 : 503, result);
     } catch (err) {
       return sendJson(res, 500, { ok: false, error: err.message });
@@ -143,7 +294,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method !== 'GET') {
-    res.writeHead(405).end();
+    sendText(res, 405, 'method not allowed');
     return;
   }
   serveStatic(res, url.pathname);

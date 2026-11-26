@@ -10,6 +10,7 @@ const path = require('node:path');
 const test = require('node:test');
 const { before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const { anchorQuote } = require('../lib/providers/zhihu');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -56,6 +57,22 @@ before(startServer);
 
 after(() => {
   if (child && child.exitCode === null) child.kill();
+});
+
+test('anchorQuote 在换行和多空格原文中不偏移', () => {
+  const raw = '先来一段无关的引子。\n\n  这是   一段 带空白 的原文，  \n用来测试锚定是否偏移。后面还有别的内容。';
+  const answers = [{ author: '测试作者', bio: '', upvotes: 1, text: raw }];
+  const anchored = anchorQuote(
+    { sourceIndex: 1, text: '这是一段带空白的原文，用来测试锚定是否偏移' },
+    answers
+  );
+
+  assert.ok(anchored, '应能锚定到原文');
+  const compact = anchored.text.replace(/\s+/g, '');
+  assert.ok(compact.includes('这是一段带空白的原文'));
+  assert.ok(compact.includes('用来测试锚定是否偏移'));
+  assert.equal(anchored.similarity, 1);
+  assert.equal(anchored.author, '测试作者');
 });
 
 test('health 在示例模式下明确标注 sample', async () => {
@@ -128,6 +145,19 @@ test('/api/analyze/stream 逐段推送并以 result 结束', async () => {
   assert.ok(last.payload.data.camps.length >= 2);
 });
 
+test('知乎链接会得到明确提示，而不是被当成搜索词', async () => {
+  const res = await fetch(`${base}/api/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: 'https://www.zhihu.com/question/457144259' })
+  });
+  assert.equal(res.status, 400);
+
+  const body = await res.json();
+  assert.equal(body.ok, false);
+  assert.match(body.error, /问题标题/);
+});
+
 test('缺少问题时返回 400 而不是崩溃', async () => {
   const res = await fetch(`${base}/api/analyze/stream`, {
     method: 'POST',
@@ -143,5 +173,12 @@ test('缺少问题时返回 400 而不是崩溃', async () => {
 test('首页可以正常访问', async () => {
   const res = await fetch(`${base}/`);
   assert.equal(res.status, 200);
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
   assert.match(await res.text(), /Fork/);
+});
+
+test('favicon 可以访问', async () => {
+  const res = await fetch(`${base}/favicon.svg`);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type') || '', /image\/svg\+xml/);
 });

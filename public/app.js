@@ -156,7 +156,7 @@ async function streamAnalyze(question, rows) {
   const res = await fetch('/api/analyze/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
-    body: JSON.stringify({ question, questionUrl: /^https?:/.test(question) ? question : undefined })
+    body: JSON.stringify({ question })
   });
   if (!res.ok || !res.body) throw new Error(`流式接口不可用（HTTP ${res.status}）`);
 
@@ -206,7 +206,7 @@ function fetchAnalyze(question) {
   return fetch('/api/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, questionUrl: /^https?:/.test(question) ? question : undefined })
+    body: JSON.stringify({ question })
   }).then((res) => res.json());
 }
 
@@ -230,13 +230,20 @@ function renderResult(payload) {
 }
 
 function renderHead(d, payload) {
+  const stats = [];
+  if (typeof d.question.answerCount === 'number' && Number.isFinite(d.question.answerCount)) {
+    stats.push(`${d.question.answerCount.toLocaleString('zh-CN')} 个回答`);
+  }
+  if (typeof d.question.followers === 'number' && Number.isFinite(d.question.followers)) {
+    stats.push(`${d.question.followers.toLocaleString('zh-CN')} 人关注`);
+  }
+  stats.push(`抽样 ${Number(d.meta.sampled) || 0} 条`);
+  stats.push(`拆出 ${d.camps.length} 个阵营`);
+
   return `<div class="qhead">
     <h2>${esc(d.question.title)}</h2>
     <div class="qmeta">
-      <span>${esc(String(d.question.answerCount))} 个回答</span>
-      <span>${esc(String(d.question.followers))} 人关注</span>
-      <span>抽样 ${esc(String(d.meta.sampled))} 条</span>
-      <span>拆出 ${esc(String(d.camps.length))} 个阵营</span>
+      ${stats.map((s) => `<span>${esc(s)}</span>`).join('')}
       ${d.question.url ? `<a href="${esc(d.question.url)}" target="_blank" rel="noopener">查看原问题 ↗</a>` : ''}
     </div>
   </div>`;

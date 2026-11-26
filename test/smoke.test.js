@@ -87,6 +87,22 @@ test('/api/analyze 返回可渲染的阵营结构', async () => {
   assert.ok(body.timings && Object.keys(body.timings).length >= 4, '四段耗时要齐全');
 });
 
+test('示例数据按问题匹配，第二个示例不会复用第一个', async () => {
+  const res = await fetch(`${base}/api/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: '年轻人要不要去大城市发展？' })
+  });
+  assert.equal(res.status, 200);
+
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.data.question.title, '年轻人要不要去大城市发展？');
+  assert.equal(body.data.camps.length, 4);
+  assert.ok(body.data.camps.some((camp) => camp.name === '机会优先派'));
+  assert.ok(body.data.camps.every((camp) => camp.quotes.length >= 1));
+});
+
 test('/api/analyze/stream 逐段推送并以 result 结束', async () => {
   const res = await fetch(`${base}/api/analyze/stream`, {
     method: 'POST',

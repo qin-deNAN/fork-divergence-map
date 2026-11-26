@@ -61,6 +61,17 @@ CI 在 Node 20 上跑同一套冒烟测试，不需要任何密钥。
 - **限流**：默认每 IP 30 次/分钟、全站 120 次/分钟，可用 `RATE_LIMIT_PER_MIN` / `RATE_LIMIT_GLOBAL_PER_MIN` 调整。默认不信任代理头，避免客户端伪造 `X-Forwarded-For` 绕过限流；部署在反向代理后面时设 `TRUST_PROXY=1`，否则所有用户会共用代理 IP 的额度。
 - **分享图**：`public/og.png` 是 1200×630 的社交分享图；`public/index.html` 里的 `og:url` / `og:image` 目前写的是公网 Demo 域名，换域名时同步替换。
 
+## 同步到 WorkBuddy
+
+WorkBuddy 发布的是它自己的 `localDir` 副本，不会自动跟随 git。仓库里的脚本会把运行时文件同步过去、备份旧文件、校验哈希与 `.env`，并用示例模式做一次启动检查：
+
+```powershell
+$env:FORK_DEPLOY_DIR = 'C:\path\to\WorkBuddy\fork'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/sync-workbuddy.ps1
+```
+
+同步后在 WorkBuddy 客户端里「下线应用 → 发布应用」才会生效。只想校验、不启动服务时加 `-SkipSmoke`。
+
 ## 接真实数据（三步）
 
 数据层是 provider 模式：`retrieve → extract → cluster → classify`，最后 `result()` 返回 payload。
@@ -111,6 +122,7 @@ fork-repo/
 ├── docs/screenshot.png       README 截图
 ├── docs/og.html              OG 分享图源文件（截图生成 public/og.png）
 ├── .github/workflows/ci.yml  CI：Node 20 跑冒烟测试
+├── scripts/sync-workbuddy.ps1 同步到 WorkBuddy 发布目录并校验
 ├── LICENSE                   MIT
 ├── record-demo.js            用真实浏览器操作录制演示视频
 ├── video/                    演示视频成片与字幕源文件

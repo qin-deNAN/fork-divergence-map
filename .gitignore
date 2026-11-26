@@ -1,0 +1,8 @@
+node_modules/
+.env
+*.log
+.DS_Store
+
+# 录制中间产物（成片与字幕仍然入库）
+video/raw*/
+video/demo-raw.webm

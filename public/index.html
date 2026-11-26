@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fork · 知乎问题的分歧地图</title>
+<meta name="description" content="不是摘要，是结构。把一个问题下的几百条回答拆成几个阵营，标出他们真正在争什么。" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true">⑂</span>
+    <span class="name">Fork</span>
+    <span class="divider"></span>
+    <span class="tag">知乎问题的分歧地图</span>
+  </div>
+  <div class="badge" id="source-badge">数据源：示例数据集</div>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>同一个问题，<br />人们在哪里分道扬镳</h1>
+    <p class="lede">
+      知乎的价值从来不在「多数人怎么看」，而在同一个问题下，有人把完全相反的道理讲得都很有道理。
+      这个工具不做摘要——它把回答拆成几个阵营，标出分歧的真正位置，以及哪些分歧可以查证、哪些只能是取舍。
+    </p>
+
+    <form id="ask" autocomplete="off">
+      <input id="q" type="text" placeholder="粘贴知乎问题链接，或直接输入一个问题" aria-label="输入问题" />
+      <button type="submit" id="submit-btn">拆解这个问题</button>
+    </form>
+
+    <div class="chips" id="chips">
+      <span class="chips-label">试试：</span>
+      <button class="chip" data-q="AI 编程工具会让程序员失业吗？">AI 会让程序员失业吗</button>
+      <button class="chip" data-q="年轻人要不要去大城市发展？">年轻人要不要去大城市</button>
+    </div>
+  </section>
+
+  <section id="progress" class="progress" hidden aria-live="polite"></section>
+  <section id="result" class="result" hidden></section>
+</main>
+
+<footer class="foot">
+  <span>Fork · 知乎黑客松 S3 参赛原型</span>
+  <span class="dot-sep">·</span>
+  <span id="foot-meta">分析结果仅代表样本内回答的分布，不代表平台立场</span>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

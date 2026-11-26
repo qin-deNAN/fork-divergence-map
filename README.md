@@ -40,7 +40,7 @@ npm start          # 无依赖，Node 20+ 直接运行
 
 **当前状态**：仓库不含任何凭证。真实链路需要知乎开放平台凭证 + LLM 配置。装了 CLI 或注入了 Secret 但配置不完整时，页面徽章会显示「配置不完整」，分析会直接报错而不是悄悄回退；两者都没有时默认走示例数据。想强制演示示例数据，在 `.env` 里设 `FORK_DATA_SOURCE=sample`，页面会标注「示例数据集」。
 
-内置两个示例问题（AI 编程工具、大城市选择），没有凭证也能完整体验四段分析和流式进度。
+内置两个示例问题（AI 编程工具、大城市选择），没有凭证也能完整体验四段分析和流式进度。示例模式只认这两个问题，输入其他问题会明确提示，不会静默复用第一条。
 
 输入框只接受问题标题；知乎链接暂不能直接解析（开放平台没有问题详情接口），粘贴链接会明确提示改用标题。
 
@@ -53,6 +53,11 @@ npm test    # 无凭证：强制示例数据，跑通 health / analyze / stream
 ```
 
 CI 在 Node 20 上跑同一套冒烟测试，不需要任何密钥。
+
+## 部署提示
+
+- **限流**：默认每 IP 30 次/分钟、全站 120 次/分钟，可用 `RATE_LIMIT_PER_MIN` / `RATE_LIMIT_GLOBAL_PER_MIN` 调整。默认不信任代理头，避免客户端伪造 `X-Forwarded-For` 绕过限流；部署在反向代理后面时设 `TRUST_PROXY=1`，否则所有用户会共用代理 IP 的额度。
+- **分享图**：`public/og.png` 是 1200×630 的社交分享图；`public/index.html` 里的 `og:url` / `og:image` 目前写的是公网 Demo 域名，换域名时同步替换。
 
 ## 接真实数据（三步）
 
@@ -95,17 +100,19 @@ fork-repo/
 ├── doctor.js                 链路自检：检查 CLI / 凭证 / LLM，--live 会实测检索
 ├── .env.example              配置模板（复制为 .env 使用）
 ├── lib/config.js             .env 加载、CLI 探测、鉴权状态
+├── lib/rate-limit.js         每 IP + 全站双阈值限流，默认不信任代理头
 ├── lib/pipeline.js           四段流水线，逐段上报开始/结束事件（前端进度条用真实事件）
 ├── lib/providers/index.js    provider 选择：有 CLI 就走真数据，可强制 sample
 ├── lib/providers/zhihu.js    知乎开放平台 + LLM 抽取（真实链路）
 ├── data/samples.json         示例数据集（同时是 payload 契约）
 ├── test/smoke.test.js        无凭证冒烟测试（示例数据）
 ├── docs/screenshot.png       README 截图
+├── docs/og.html              OG 分享图源文件（截图生成 public/og.png）
 ├── .github/workflows/ci.yml  CI：Node 20 跑冒烟测试
 ├── LICENSE                   MIT
 ├── record-demo.js            用真实浏览器操作录制演示视频
 ├── video/                    演示视频成片与字幕源文件
-└── public/                   单页前端，无构建
+└── public/                   单页前端，无构建（含 og.png 分享图）
 ```
 
 ## 30 秒路演脚本

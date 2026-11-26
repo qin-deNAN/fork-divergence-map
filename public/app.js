@@ -80,6 +80,9 @@ async function run(question) {
   } catch (err) {
     if (err.streamStarted) {
       payload = { ok: false, error: err.message };
+    } else if (err.status >= 400 && err.status < 500 && err.status !== 404 && err.status !== 405) {
+      // 400/429 是服务端明确拒绝（链接、参数、限流），不要再用旧接口重复请求一次
+      payload = { ok: false, error: err.message };
     } else {
       // 服务端不支持流式（例如旧版本部署）时，退回一次性接口
       const first = progress.rows.get(STAGES[0].id);
@@ -158,7 +161,18 @@ async function streamAnalyze(question, rows) {
     headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
     body: JSON.stringify({ question })
   });
-  if (!res.ok || !res.body) throw new Error(`流式接口不可用（HTTP ${res.status}）`);
+  if (!res.ok || !res.body) {
+    let message = `流式接口不可用（HTTP ${res.status}）`;
+    try {
+      const data = await res.json();
+      if (data && data.error) message = data.error;
+    } catch {
+      /* 非 JSON 响应，保留默认文案 */
+    }
+    const err = new Error(message);
+    err.status = res.status;
+    throw err;
+  }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Fork · OG card</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(900px 420px at 78% -10%, rgba(94, 140, 255, 0.28), transparent 60%),
+      radial-gradient(700px 380px at 8% 110%, rgba(230, 171, 86, 0.14), transparent 60%),
+      #0b0e14;
+    color: #eef2f8;
+    font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.65), transparent 82%);
+  }
+  .fork-art {
+    position: absolute; right: 48px; top: 178px;
+    width: 330px; height: 270px; opacity: 0.72;
+  }
+  .wrap {
+    position: relative; height: 100%;
+    padding: 56px 72px 44px;
+    display: flex; flex-direction: column;
+  }
+  .brand { display: flex; align-items: center; gap: 15px; }
+  .mark {
+    width: 46px; height: 46px; border-radius: 13px;
+    background: rgba(122, 162, 255, 0.14);
+    border: 1px solid rgba(122, 162, 255, 0.32);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .name { font-size: 26px; font-weight: 700; letter-spacing: 0.5px; }
+  .tag { color: #8d97a8; font-size: 17px; letter-spacing: 0.5px; }
+  h1 {
+    margin: 42px 0 18px;
+    font-size: 62px; line-height: 1.18;
+    letter-spacing: -1.5px; font-weight: 800;
+  }
+  h1 em { font-style: normal; color: #8fb0ff; }
+  p { margin: 0; color: #a7b0c0; font-size: 25px; line-height: 1.5; letter-spacing: 0.2px; }
+  .pills { margin-top: auto; display: flex; gap: 14px; }
+  .pill { padding: 12px 20px; border-radius: 999px; font-size: 19px; border: 1px solid; }
+  .fact { color: #e8c07d; border-color: rgba(232, 192, 125, 0.4); background: rgba(232, 192, 125, 0.08); }
+  .value { color: #8fb0ff; border-color: rgba(143, 176, 255, 0.4); background: rgba(143, 176, 255, 0.08); }
+  .minority { color: #7fd8b4; border-color: rgba(127, 216, 180, 0.4); background: rgba(127, 216, 180, 0.08); }
+  .foot {
+    margin-top: 22px; color: #6c7686; font-size: 16px;
+    display: flex; justify-content: space-between; letter-spacing: 0.3px;
+  }
+</style>
+</head>
+<body>
+<div class="grid"></div>
+<svg class="fork-art" viewBox="0 0 330 270" fill="none" aria-hidden="true">
+  <path d="M4 135H92" stroke="rgba(143,176,255,.3)" stroke-width="3" />
+  <path d="M92 135C150 135 158 52 218 52H320" stroke="rgba(232,192,125,.55)" stroke-width="3" />
+  <path d="M92 135H320" stroke="rgba(143,176,255,.55)" stroke-width="3" />
+  <path d="M92 135C150 135 158 218 218 218H320" stroke="rgba(127,216,180,.55)" stroke-width="3" />
+  <circle cx="92" cy="135" r="6" fill="#8fb0ff" />
+  <circle cx="320" cy="52" r="6" fill="#e8c07d" />
+  <circle cx="320" cy="135" r="6" fill="#8fb0ff" />
+  <circle cx="320" cy="218" r="6" fill="#7fd8b4" />
+</svg>
+<div class="wrap">
+  <div class="brand">
+    <div class="mark">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+        <path d="M13 24V14M13 14C13 8 6 8 6 2M13 14C13 8 20 8 20 2" stroke="#8fb0ff" stroke-width="2.6" stroke-linecap="round"/>
+        <circle cx="13" cy="24" r="2.4" fill="#8fb0ff"/>
+      </svg>
+    </div>
+    <div class="name">Fork</div>
+    <div class="tag">知乎问题的分歧地图</div>
+  </div>
+
+  <h1>同一个问题，<br />人们在哪里<em>分道扬镳</em></h1>
+  <p>不是摘要，是结构。把高赞回答拆成阵营，标出真正的分歧位置。</p>
+
+  <div class="pills">
+    <div class="pill fact">事实分歧 · 可以查证</div>
+    <div class="pill value">价值分歧 · 只能取舍</div>
+    <div class="pill minority">沉默的少数派</div>
+  </div>
+
+  <div class="foot">
+    <span>fork · 知乎黑客松 S3</span>
+    <span>把争吵还原成可以判断的分歧</span>
+  </div>
+</div>
+</body>
+</html>

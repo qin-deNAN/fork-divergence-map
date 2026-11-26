@@ -7,6 +7,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { analyze } = require('./lib/pipeline');
+const { createLimiter, rateHeaders } = require('./lib/rate-limit');
 
 const PORT = Number(process.env.PORT || 4173);
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -26,9 +27,8 @@ const SECURITY_HEADERS = {
   'X-Frame-Options': 'DENY'
 };
 
-const RATE_LIMIT = 30;
 const RATE_WINDOW_MS = 60 * 1000;
-const rateBuckets = new Map();
+const checkRateLimit = createLimiter({ windowMs: RATE_WINDOW_MS });
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const CACHE_MAX = 50;
@@ -38,10 +38,22 @@ function headers(extra = {}) {
   return { ...SECURITY_HEADERS, ...extra };
 }
 
-function sendJson(res, code, body) {
+function sendJson(res, code, body, extra = {}) {
   const buf = Buffer.from(JSON.stringify(body));
-  res.writeHead(code, headers({ 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': buf.length }));
+  res.writeHead(
+    code,
+    headers({ 'Content-Type': 'application/json; charset=utf-8', 'Content-Length': buf.length, ...extra })
+  );
   res.end(buf);
+}
+
+function rateLimited(res, rl) {
+  return sendJson(
+    res,
+    429,
+    { ok: false, error: '请求过于频繁，请稍后再试。' },
+    { ...rateHeaders(rl), 'Retry-After': String(rl.retryAfter) }
+  );
 }
 
 function sendText(res, code, text) {
@@ -125,27 +137,6 @@ function cacheSet(key, value) {
   resultCache.set(key, { at: Date.now(), value });
 }
 
-function clientIp(req) {
-  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return forwarded || req.socket.remoteAddress || 'unknown';
-}
-
-function isRateLimited(req) {
-  const now = Date.now();
-  const ip = clientIp(req);
-  let bucket = rateBuckets.get(ip);
-  if (!bucket || now >= bucket.reset) {
-    bucket = { count: 0, reset: now + RATE_WINDOW_MS };
-    rateBuckets.set(ip, bucket);
-  }
-  bucket.count += 1;
-
-  if (rateBuckets.size > 1000) {
-    for (const [key, value] of rateBuckets) if (now >= value.reset) rateBuckets.delete(key);
-  }
-  return bucket.count > RATE_LIMIT;
-}
-
 function serveStatic(res, urlPath) {
   let decoded;
   try {
@@ -201,9 +192,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/api/analyze/stream' && req.method === 'POST') {
-    if (isRateLimited(req)) {
-      return sendJson(res, 429, { ok: false, error: '请求过于频繁，请稍后再试。' });
-    }
+    const rl = checkRateLimit(req);
+    if (rl.limited) return rateLimited(res, rl);
 
     let body;
     try {
@@ -222,7 +212,8 @@ const server = http.createServer(async (req, res) => {
         'Content-Type': 'application/x-ndjson; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no'
+        'X-Accel-Buffering': 'no',
+        ...rateHeaders(rl)
       })
     );
     if (typeof res.flushHeaders === 'function') res.flushHeaders();
@@ -267,9 +258,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/api/analyze' && req.method === 'POST') {
-    if (isRateLimited(req)) {
-      return sendJson(res, 429, { ok: false, error: '请求过于频繁，请稍后再试。' });
-    }
+    const rl = checkRateLimit(req);
+    if (rl.limited) return rateLimited(res, rl);
 
     let body;
     try {
@@ -287,7 +277,7 @@ const server = http.createServer(async (req, res) => {
 
       const result = await analyze({ question: parsed.question });
       if (result.ok && result.provider !== 'sample') cacheSet(key, result);
-      return sendJson(res, result.ok ? 200 : 503, result);
+      return sendJson(res, result.ok ? 200 : result.status || 503, result, rateHeaders(rl));
     } catch (err) {
       return sendJson(res, 500, { ok: false, error: err.message });
     }

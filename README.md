@@ -2,6 +2,8 @@
 
 > 不是摘要，是结构。
 
+**在线 Demo**：[fork-divergence-map.app.workbuddy.host](https://fork-divergence-map.app.workbuddy.host/?sharecode=G3YXORSPO5) —— 不用本地配置，打开即可体验四段分析与流式进度。
+
 ![Fork：把回答拆成阵营，并标出分歧的真正位置](docs/screenshot.png)
 
 [30 秒演示视频](video/Fork演示视频.mp4)
